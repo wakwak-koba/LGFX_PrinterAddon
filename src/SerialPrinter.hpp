@@ -13,7 +13,9 @@ namespace lgfx_addon
     lgfx::Bus_Stream  _bus_instance;
 
   public:
-    SerialPrinter(Stream* stream, uint16_t height, int rts = -1)
+    SerialPrinter(Stream* stream, uint16_t height, int rts) : SerialPrinter(stream, 0, height, rts) {;}
+
+    SerialPrinter(Stream* stream, uint16_t width, uint16_t height, int rts)
     {
       {
         auto cfg = _bus_instance.config();
@@ -24,11 +26,15 @@ namespace lgfx_addon
       {
         auto cfg = _panel_instance.config();
         cfg.pin_busy = rts;
-        cfg.memory_height = cfg.panel_height = height;
+        if(width > 0)
+          cfg.memory_width  = cfg.panel_width  = width;
+        if(height > 0)
+          cfg.memory_height = cfg.panel_height = height;
         _panel_instance.config(cfg);
       }
       setPanel(&_panel_instance);
     }
   };
-//----------------------------------------------------------------------------
+
+  //----------------------------------------------------------------------------
 }

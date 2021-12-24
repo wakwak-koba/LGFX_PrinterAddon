@@ -1,4 +1,4 @@
-#include "EM5820.hpp"
+#include "ESCPOS.hpp"
 #include <lgfx/v1/Bus.hpp>
 #include <lgfx/v1/platforms/common.hpp>
 #include <lgfx/v1/misc/pixelcopy.hpp>
@@ -10,30 +10,35 @@
 
 namespace lgfx_addon
 {
- inline namespace aiebcy
+ inline namespace epson
  {
 //----------------------------------------------------------------------------
 
   static constexpr uint8_t Bayer[16] = { 8, 200, 40, 232, 72, 136, 104, 168, 56, 248, 24, 216, 120, 184, 88, 152 };
 
-  EM5820::EM5820(void)
+  ESCPOS::ESCPOS(uint16_t width)
   {
-    _cfg.memory_width  = _cfg.panel_width  = 384;
+    _cfg.memory_width  = _cfg.panel_width  = width;
   }
 
-  lgfx::color_depth_t EM5820::setColorDepth(lgfx::color_depth_t depth)
+  ESCPOS::ESCPOS(uint16_t width, uint16_t height) : ESCPOS(width)
+  {
+    _cfg.memory_height = _cfg.panel_height = height;
+  }
+
+  lgfx::color_depth_t ESCPOS::setColorDepth(lgfx::color_depth_t depth)
   {
     _write_depth = lgfx::color_depth_t::rgb565_2Byte;
     _read_depth = lgfx::color_depth_t::rgb565_2Byte;
     return lgfx::color_depth_t::rgb565_2Byte;
   }
 
-  size_t EM5820::_get_buffer_length(void) const
+  size_t ESCPOS::_get_buffer_length(void) const
   {
     return ((_cfg.panel_width + 7) & ~7) * _cfg.panel_height >> 3;
   }
 
-  bool EM5820::init(bool use_reset)
+  bool ESCPOS::init(bool use_reset)
   {
     if(_cfg.pin_busy >= 0)
       pinMode(_cfg.pin_busy, lgfx::pin_mode_t::input);
@@ -56,25 +61,36 @@ namespace lgfx_addon
     return true;
   }
 
-  void EM5820::waitDisplay(void)
+  void ESCPOS::waitDisplay(void)
   {
     _wait_busy();
   }
 
-  bool EM5820::displayBusy(void)
+  bool ESCPOS::displayBusy(void)
   {
     return _cfg.pin_busy >= 0 && lgfx::gpio_in(_cfg.pin_busy);
   }
 
-  void EM5820::display(uint_fast16_t x, uint_fast16_t y, uint_fast16_t w, uint_fast16_t h)
+  void ESCPOS::print_gs_v(uint_fast16_t x, uint_fast16_t y, uint_fast16_t w, uint_fast16_t h)
   {
-    w = (_cfg.panel_width + 7) >> 3;    // 8dots = 1bytes
-    h = _cfg.panel_height;
-      uint8_t buf[] = {0x1d, 0x76, 0x30, 0x00, (uint8_t)(w & 0xff), (uint8_t)((w >> 8) & 0xff), (uint8_t)(h & 0xff), (uint8_t)((h >> 8) & 0xff)};
+    if(!w)
+      w = _cfg.panel_width;
+    w = (w + 7) >> 3;  // 8dots = 1bytes
+    
+    if(!h)
+      h = _cfg.panel_height;
+    
+    // GS v 0 m xL xH yL yH d1 .... dk
+    uint8_t buf[] = {0x1d, 0x76, 0x30, 0x00, (uint8_t)(w & 0xff), (uint8_t)((w >> 8) & 0xff), (uint8_t)(h & 0xff), (uint8_t)((h >> 8) & 0xff)};
     writeBytes(buf, sizeof(buf));
     
-    for(uint8_t y = 0; y < h; y++) {
-      for(uint8_t x = 0; x < w; x++) {
+    uint_fast16_t xs = x;
+    uint_fast16_t ys = y;
+    uint_fast16_t xe = x + w;
+    uint_fast16_t ye = y + h;
+    
+    for(y = ys; y < ye; y++) {
+      for(x = xs; x < xe; x++) {
         uint8_t dt = _invert ? 0xff : 0x00;
         for(uint8_t b = 0; b < 8; b++)
           if(!_read_pixel((x << 3) | b, y))
@@ -84,17 +100,17 @@ namespace lgfx_addon
     }
   }
 
-  void EM5820::setInvert(bool invert)
+  void ESCPOS::setInvert(bool invert)
   {
     _invert = invert;
   }
 
-  void EM5820::writeBytes(const uint8_t* data, uint32_t length) {
+  void ESCPOS::writeBytes(const uint8_t* data, uint32_t length) {
     _wait_busy();
     _bus->writeBytes(data, length, true, true);
   }
   
-  void EM5820::writeFillRectPreclipped(uint_fast16_t x, uint_fast16_t y, uint_fast16_t w, uint_fast16_t h, uint32_t rawcolor)
+  void ESCPOS::writeFillRectPreclipped(uint_fast16_t x, uint_fast16_t y, uint_fast16_t w, uint_fast16_t h, uint32_t rawcolor)
   {
     uint_fast16_t xs = x, xe = x + w - 1;
     uint_fast16_t ys = y, ye = y + h - 1;
@@ -124,7 +140,7 @@ namespace lgfx_addon
     } while (++y <= ye);
   }
 
-  void EM5820::writeImage(uint_fast16_t x, uint_fast16_t y, uint_fast16_t w, uint_fast16_t h, lgfx::pixelcopy_t* param, bool use_dma)
+  void ESCPOS::writeImage(uint_fast16_t x, uint_fast16_t y, uint_fast16_t w, uint_fast16_t h, lgfx::pixelcopy_t* param, bool use_dma)
   {
     uint_fast16_t xs = x, xe = x + w - 1;
     uint_fast16_t ys = y, ye = y + h - 1;
@@ -153,7 +169,7 @@ namespace lgfx_addon
     } while (++y < h);
   }
 
-  void EM5820::writePixels(lgfx::pixelcopy_t* param, uint32_t length, bool use_dma)
+  void ESCPOS::writePixels(lgfx::pixelcopy_t* param, uint32_t length, bool use_dma)
   {
     {
       uint_fast16_t xs = _xs;
@@ -193,7 +209,7 @@ namespace lgfx_addon
     _ypos = ypos;
   }
 
-  void EM5820::readRect(uint_fast16_t x, uint_fast16_t y, uint_fast16_t w, uint_fast16_t h, void* dst, lgfx::pixelcopy_t* param)
+  void ESCPOS::readRect(uint_fast16_t x, uint_fast16_t y, uint_fast16_t w, uint_fast16_t h, void* dst, lgfx::pixelcopy_t* param)
   {
     auto readbuf = (lgfx::swap565_t*)alloca(w * sizeof(lgfx::swap565_t));
     param->src_data = readbuf;
@@ -211,7 +227,7 @@ namespace lgfx_addon
     } while (++y < h);
   }
 
-  bool EM5820::_wait_busy(uint32_t timeout)
+  bool ESCPOS::_wait_busy(uint32_t timeout)
   {
     if (displayBusy())
     {
@@ -225,7 +241,7 @@ namespace lgfx_addon
     return true;
   }
 
-  void EM5820::_draw_pixel(uint_fast16_t x, uint_fast16_t y, uint32_t value)
+  void ESCPOS::_draw_pixel(uint_fast16_t x, uint_fast16_t y, uint32_t value)
   {
     _rotate_pos(x, y);
     uint32_t idx = ((_cfg.panel_width + 7) & ~7) * y + x;
@@ -234,7 +250,7 @@ namespace lgfx_addon
     else     _buf[idx >> 3] &= ~(0x80 >> (idx & 7));
   }
 
-  bool EM5820::_read_pixel(uint_fast16_t x, uint_fast16_t y)
+  bool ESCPOS::_read_pixel(uint_fast16_t x, uint_fast16_t y)
   {
     _rotate_pos(x, y);
     uint32_t idx = ((_cfg.panel_width + 7) & ~7) * y + x;
