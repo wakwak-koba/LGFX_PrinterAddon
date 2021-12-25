@@ -71,34 +71,6 @@ namespace lgfx_addon
     return _cfg.pin_busy >= 0 && lgfx::gpio_in(_cfg.pin_busy);
   }
 
-  void ESCPOS::print_gs_v(uint_fast16_t x, uint_fast16_t y, uint_fast16_t w, uint_fast16_t h)
-  {
-    if(!w)
-      w = _cfg.panel_width;
-    w = (w + 7) >> 3;  // 8dots = 1bytes
-    
-    if(!h)
-      h = _cfg.panel_height;
-    
-    // GS v 0 m xL xH yL yH d1 .... dk
-    uint8_t buf[] = {0x1d, 0x76, 0x30, 0x00, (uint8_t)(w & 0xff), (uint8_t)((w >> 8) & 0xff), (uint8_t)(h & 0xff), (uint8_t)((h >> 8) & 0xff)};
-    writeBytes(buf, sizeof(buf));
-    
-    uint_fast16_t xs = x;
-    uint_fast16_t ys = y;
-    uint_fast16_t xe = x + w;
-    uint_fast16_t ye = y + h;
-    
-    for(y = ys; y < ye; y++) {
-      for(x = xs; x < xe; x++) {
-        uint8_t dt = _invert ? 0xff : 0x00;
-        for(uint8_t b = 0; b < 8; b++)
-          if(!_read_pixel((x << 3) | b, y))
-              dt ^= 0x01 << (7 - b);
-        writeBytes(&dt, 1);
-      }
-    }
-  }
 
   void ESCPOS::setInvert(bool invert)
   {
@@ -257,6 +229,112 @@ namespace lgfx_addon
     return _buf[idx >> 3] & (0x80 >> (idx & 7));
   }
 
+  void ESCPOS::print_ESC_asterisk(uint_fast16_t x, uint_fast16_t y, uint_fast16_t w, uint_fast16_t h)
+  {
+    if(!w)
+      w = _cfg.panel_width;
+    
+    if(!h)
+      h = _cfg.panel_height;
+    
+    uint_fast16_t xs = x;
+    uint_fast16_t ys = y;
+    
+    {
+      uint8_t cmd_feed[] = {0x1B, 0x33, 24};
+      writeBytes(cmd_feed, sizeof(cmd_feed));
+    }
+    
+    uint8_t cmd[] = {0x1b, 0x2a, 33, (uint8_t)(w & 0xff), (uint8_t)((w >> 8) & 0xff)};
+    uint8_t buf[3 * w];
+    
+    for(y = 0; y < h; y += 24) {
+      memset(buf, _invert ? 0xff : 0x00, sizeof(buf));
+      for(x = 0; x < w; x++) {
+        for(uint16_t d = 0; d < 3; d++) {
+          for(uint8_t b = 0; b < 8; b++)
+            if(!_read_pixel(xs + x, ys + y + (d << 3) + b))
+              buf[x * 3 + d] ^= 0x01 << (7 - b);
+        }
+      }
+      writeBytes(cmd, sizeof(cmd));
+      writeBytes(buf, sizeof(buf));
+    }
+  }
+
+  void ESCPOS::print_GS_v(uint_fast16_t x, uint_fast16_t y, uint_fast16_t w, uint_fast16_t h)
+  {
+    if(!w)
+      w = _cfg.panel_width;
+    
+    if(!h)
+      h = _cfg.panel_height;
+
+    uint16_t bw = (w + 7) >> 3; // 8dots = 1bytes
+
+    {
+      // GS v 0 m xL xH yL yH d1 .... dk
+      uint8_t cmd[] = {0x1d, 0x76, 0x30, 0x00, (uint8_t)(bw & 0xff), (uint8_t)((bw >> 8) & 0xff), (uint8_t)(h & 0xff), (uint8_t)((h >> 8) & 0xff)};
+      writeBytes(cmd, sizeof(cmd));
+    }
+    
+    uint_fast16_t xs = x;
+    uint_fast16_t ys = y;
+    
+    uint8_t buf[bw];
+    for(y = 0; y < h; y++) {
+      memset(buf, _invert ? 0xff : 0x00, sizeof(buf));
+      for(x = 0; x < bw; x++) {
+        for(uint8_t b = 0; b < 8; b++)
+          if(!_read_pixel(xs + (x << 3) + b, ys + y))
+            buf[x] ^= 0x01 << (7 - b);
+      }
+      writeBytes(buf, sizeof(buf));
+    }
+  }
+  
+  void ESCPOS::print_GS_L(uint_fast16_t x, uint_fast16_t y, uint_fast16_t w, uint_fast16_t h)
+  {
+    if(!w)
+      w = _cfg.panel_width;
+    
+    if(!h)
+      h = _cfg.panel_height;
+    
+    uint16_t bw = (w + 7) >> 3; // 8dots = 1bytes
+    uint16_t plen = 10 + bw * h;
+    
+    {
+      // GS ( L pL pH m fn a bx by c xL xH yL yH d1 .... dk
+      uint8_t cmd1[] = {0x1d, 0x28, 0x4c, 4, 0, 48, 49, 51, 51
+          , 0x1d, 0x28, 0x4c
+          , (uint8_t)(plen & 0xff), (uint8_t)((plen >> 8) & 0xff)
+        , 48, 112, 48, 1, 1, 49
+        , (uint8_t)(w & 0xff), (uint8_t)((w >> 8) & 0xff)
+        , (uint8_t)(h & 0xff), (uint8_t)((h >> 8) & 0xff)
+      };
+      writeBytes(cmd1, sizeof(cmd1));
+    }
+    
+    uint_fast16_t xs = x;
+    uint_fast16_t ys = y;
+    
+    uint8_t buf[bw];
+    for(y = 0; y < h; y++) {
+      memset(buf, _invert ? 0xff : 0x00, sizeof(buf));
+      for(x = 0; x < w; x++) {
+        for(uint8_t b = 0; b < 8; b++)
+          if(!_read_pixel(x << 3 | b, y))
+            buf[x] ^= 0x01 << (7 - b);
+      }
+      writeBytes(buf, sizeof(buf));
+    }
+    
+    {
+      uint8_t cmd2[] = {0x1d, 0x28, 0x4c, 2, 0, 48, 50};
+      writeBytes(cmd2, sizeof(cmd2));
+    }
+  }
 //----------------------------------------------------------------------------
  }
 }

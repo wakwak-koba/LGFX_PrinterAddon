@@ -25,7 +25,7 @@ namespace lgfx_addon
 
     void waitDisplay(void) override;
     bool displayBusy(void) override;
-    void display(uint_fast16_t x, uint_fast16_t y, uint_fast16_t w, uint_fast16_t h) override { print_gs_v(x, y, w, h); }
+    void display(uint_fast16_t x, uint_fast16_t y, uint_fast16_t w, uint_fast16_t h) override { print_GS_v(x, y, w, h); }
 
     void writeFillRectPreclipped(uint_fast16_t x, uint_fast16_t y, uint_fast16_t w, uint_fast16_t h, uint32_t rawcolor) override;
     void writeImage(uint_fast16_t x, uint_fast16_t y, uint_fast16_t w, uint_fast16_t h, lgfx::pixelcopy_t* param, bool use_dma) override;
@@ -46,7 +46,9 @@ namespace lgfx_addon
     bool _read_pixel(uint_fast16_t x, uint_fast16_t y);
     
   protected:
-    void print_gs_v(uint_fast16_t x, uint_fast16_t y, uint_fast16_t w, uint_fast16_t h);
+    void print_ESC_asterisk(uint_fast16_t x, uint_fast16_t y, uint_fast16_t w, uint_fast16_t h);
+    void print_GS_v(uint_fast16_t x, uint_fast16_t y, uint_fast16_t w, uint_fast16_t h);
+    void print_GS_L(uint_fast16_t x, uint_fast16_t y, uint_fast16_t w, uint_fast16_t h);
     
   };
 //----------------------------------------------------------------------------
