@@ -1,7 +1,6 @@
 /*
     https://twitter.com/wakwak_koba/
 */
-#include <M5Stack.h>
 #include <WiFi.h>
 #include <HTTPClient.h>
 
@@ -14,8 +13,7 @@
 static lgfx_addon::SerialPrinter<lgfx_addon::aiebcy::EM5820> printer(&Serial1, 192, 19);
 
 void setup() {
-  M5.begin(true, false, true);
-  Serial1.begin(9600, SERIAL_8N1, 33, 23);
+  Serial.begin(115200);
 
   Serial.println("WiFi");
 #if defined (wifi_ssid) && defined (wifi_pass)
@@ -29,7 +27,9 @@ void setup() {
   }
   Serial.println("connected");
   
+  Serial1.begin(9600, SERIAL_8N1, 33, 23);
   printer.init();
+  printer.clear(TFT_WHITE);
   
   printer.drawPngUrl("http://t.wakwak-koba.jp/garakuta/monodora.png");
 
